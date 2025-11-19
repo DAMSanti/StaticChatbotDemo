@@ -356,8 +356,8 @@
           const assistantMessage = data.choices[0].message.content;
           console.log('Mensaje:', assistantMessage);
 
-          // Extraer citaciones del mensaje (formato: [C1] o 【C1】)
-          const citationMatches = assistantMessage.match(/[\[\【]C(\d+)[\]\】]/g) || [];
+          // Extraer citaciones del mensaje (formato: [C1], 【C1】, §C1, o (§C1))
+          const citationMatches = assistantMessage.match(/[\[\【]?§?C(\d+)[\]\】]?/g) || [];
           console.log('Citaciones encontradas en mensaje:', citationMatches);
 
           // Si hay citaciones pero no hay retrieval_data, usar URLs por defecto del BOE
@@ -380,7 +380,7 @@
               // Usar URLs por defecto (rotar si hay más citaciones que URLs)
               const urlIndex = (index % defaultBOEUrls.length);
               citationMap[citationKey] = defaultBOEUrls[urlIndex];
-              console.log(`Mapeado ${citationKey} → ${defaultBOEUrls[urlIndex]}`);
+              console.log(`Mapeado ${citationKey} (${match}) → ${defaultBOEUrls[urlIndex]}`);
             });
           }
 
@@ -432,12 +432,17 @@
     }
 
     function processCitations(text) {
-      // Reemplazar AMBOS formatos: [C1] y 【C1】 con enlaces
-      const citationPattern = /[\[\【]C(\d+)[\]\】]/g;
+      // Reemplazar TODOS los formatos: [C1], 【C1】, §C1 con enlaces
+      const citationPattern = /[\[\【]?§?C(\d+)[\]\】]?/g;
       const citationMatches = text.match(citationPattern) || [];
-      console.log(`Procesando ${citationMatches.length} citaciones: ${citationMatches.join(', ')}`);
+      
+      // Filtrar duplicados (puede haber matches vacías)
+      const uniqueCitations = [...new Set(citationMatches)].filter(c => c.length > 0);
+      console.log(`Procesando ${uniqueCitations.length} citaciones únicas: ${uniqueCitations.join(', ')}`);
       
       return text.replace(citationPattern, (match, num) => {
+        if (!match || !num) return match;
+        
         const citationKey = `C${num}`;
         const url = citationMap[citationKey];
 
