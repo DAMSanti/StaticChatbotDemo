@@ -174,6 +174,54 @@
       transform: scale(0.95);
     }
 
+    /* Formateo de respuestas del bot */
+    .message.bot .disclaimer {
+      background: linear-gradient(120deg, #fee2e2 0%, #fecaca 100%);
+      border-left: 4px solid #dc2626;
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #991b1b;
+    }
+
+    .message.bot .content {
+      line-height: 1.6;
+      margin-bottom: 16px;
+      color: #1a202c;
+    }
+
+    .message.bot .content p {
+      margin: 12px 0;
+    }
+
+    .message.bot .recommendation {
+      background: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #166534;
+      font-style: italic;
+    }
+
+    .message.bot .metadata {
+      background: #f3f4f6;
+      border-left: 4px solid #6b7280;
+      padding: 12px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #374151;
+      margin-top: 12px;
+    }
+
+    .message.bot .metadata strong {
+      color: #111827;
+      font-weight: 600;
+    }
+
     .chat-input-area {
       padding: 16px;
       background: white;
@@ -403,8 +451,9 @@
             content: assistantMessage
           });
 
-          // Mostrar mensaje
-          addMessage(processedMessage, 'bot', true);
+          // Formatear y mostrar mensaje
+          const formattedHTML = formatBotResponse(processedMessage);
+          addMessage(formattedHTML, 'bot', true);
         } else {
           throw new Error('Respuesta inesperada del servidor');
         }
@@ -453,6 +502,76 @@
         }
         return match;
       });
+    }
+
+    function formatBotResponse(html) {
+      // Parsear la respuesta del agente y formatearla correctamente
+      // Estructura esperada:
+      // **No soy un abogado real...** \n\n
+      // [Explicación con citaciones]
+      // Te recomiendo una consulta...
+      // **Categoría:** ... **Confianza:** ...
+
+      // Convertir saltos de línea múltiples en párrafos
+      let formatted = html;
+
+      // 1. Encapsular disclaimer en <div class="disclaimer">
+      formatted = formatted.replace(
+        /\*\*No soy un abogado real, soy un asistente virtual de Barbara & Abogados\.\*\*/g,
+        '<div class="disclaimer"><strong>No soy un abogado real, soy un asistente virtual de Barbara &amp; Abogados.</strong></div>'
+      );
+
+      // 2. Dividir por párrafos (saltos dobles)
+      const parts = formatted.split(/\n\n+/);
+      
+      let result = '';
+      let mainContent = '';
+      let recommendation = '';
+      let metadata = '';
+
+      // Procesar cada parte
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i].trim();
+        
+        if (!part) continue;
+
+        // Si contiene "Te recomiendo"
+        if (part.includes('Te recomiendo')) {
+          recommendation = part;
+        }
+        // Si contiene "Categoría" o "Confianza"
+        else if (part.includes('Categoría') || part.includes('Confianza')) {
+          metadata = part;
+        }
+        // Si contiene el disclaimer (ya procesado)
+        else if (part.includes('disclaimer')) {
+          result += part;
+        }
+        // Resto es contenido principal
+        else {
+          mainContent += part + '\n\n';
+        }
+      }
+
+      // Construir el HTML final
+      let finalHTML = result;
+      
+      // Agregar contenido principal en <div class="content">
+      if (mainContent.trim()) {
+        finalHTML += `<div class="content">${mainContent.trim()}</div>`;
+      }
+
+      // Agregar recomendación en <div class="recommendation">
+      if (recommendation) {
+        finalHTML += `<div class="recommendation">${recommendation}</div>`;
+      }
+
+      // Agregar metadata en <div class="metadata">
+      if (metadata) {
+        finalHTML += `<div class="metadata">${metadata}</div>`;
+      }
+
+      return finalHTML;
     }
 
     function addMessage(content, type, isHtml = false) {
