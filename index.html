@@ -343,20 +343,41 @@
 
         const data = await response.json();
 
+        // DEBUG: Log completo de la respuesta
+        console.log('=== RESPUESTA COMPLETA DE API ===');
+        console.log(JSON.stringify(data, null, 2));
+        console.log('=== FIN RESPUESTA ===');
+
         // Remover indicador de carga
         removeLoadingIndicator(loadingId);
 
         // Procesar respuesta
         if (data.choices && data.choices[0]) {
           const assistantMessage = data.choices[0].message.content;
+          console.log('Mensaje:', assistantMessage);
 
-          // Extraer y mapear citaciones
+          // Extraer y mapear citaciones - intentar de múltiples fuentes
+          console.log('Buscando citaciones en:');
+          console.log('  - data.retrieval:', data.retrieval);
+          console.log('  - data.citations:', data.citations);
+          console.log('  - data.context:', data.context);
+          
           if (data.retrieval && data.retrieval.retrieved_data) {
+            console.log('✓ Encontrado en data.retrieval.retrieved_data');
             updateCitationMap(data.retrieval.retrieved_data);
+          } else if (data.context && data.context.retrieved_data) {
+            console.log('✓ Encontrado en data.context.retrieved_data');
+            updateCitationMap(data.context.retrieved_data);
+          } else if (data.citations && data.citations.length > 0) {
+            console.log('✓ Encontrado en data.citations');
+            updateCitationMapFromCitations(data.citations);
+          } else {
+            console.log('✗ No se encontraron datos de recuperación');
           }
 
           // Convertir [C1] a enlaces
           const processedMessage = processCitations(assistantMessage);
+          console.log('Citaciones procesadas:', citationMap);
 
           // Agregar a historial
           conversationHistory.push({
@@ -387,15 +408,33 @@
         const citationKey = `C${index + 1}`;
         if (item.filename) {
           citationMap[citationKey] = item.filename;
+          console.log(`Mapeado ${citationKey} → ${item.filename}`);
+        }
+      });
+    }
+
+    function updateCitationMapFromCitations(citations) {
+      // Actualizar mapeo desde array de citations
+      citations.forEach((citation, index) => {
+        const citationKey = `C${index + 1}`;
+        if (citation.source || citation.url || citation.reference) {
+          const url = citation.source || citation.url || citation.reference;
+          citationMap[citationKey] = url;
+          console.log(`Mapeado ${citationKey} → ${url}`);
         }
       });
     }
 
     function processCitations(text) {
       // Reemplazar [C1], [C2], etc. con enlaces
+      const citationMatches = text.match(/\[C(\d+)\]/g) || [];
+      console.log(`Citaciones encontradas en texto: ${citationMatches.join(', ')}`);
+      
       return text.replace(/\[C(\d+)\]/g, (match, num) => {
         const citationKey = `C${num}`;
         const url = citationMap[citationKey];
+
+        console.log(`  Procesando ${match}: url = ${url || 'NO ENCONTRADA'}`);
 
         if (url) {
           return `<a href="${url}" class="citation-link" target="_blank" rel="noopener noreferrer">${match}</a>`;
