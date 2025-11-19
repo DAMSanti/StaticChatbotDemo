@@ -19,74 +19,16 @@
 </head>
 <body>
   <div class="container">
-    <h1>Chatbot - Static Demo</h1>
-    <p>Demo ligera que envía la pregunta al endpoint del backend y muestra la respuesta.</p>
+    <h1>Chatbot - Integrado</h1>
+    <p>El chatbot se ha integrado inline en la página (no flotante). Si prefieres que sea flotante, puedo revertirlo.</p>
 
-    <div class="messages" id="messages" aria-live="polite"></div>
-
-    <div class="input-row">
-      <input id="q" type="text" placeholder="Escribe tu pregunta..." />
-      <button id="send">Enviar</button>
-    </div>
+    <!-- Contenedor donde se renderizará el iframe del chatbot -->
+    <div id="chat-container" style="width:100%;height:640px;border:1px solid #e6eef6;border-radius:6px;overflow:hidden;margin-top:16px"></div>
 
     <footer>
-      Cambia la variable <code>API_URL</code> dentro del script para apuntar a tu backend.
+      El widget se montará dentro del contenedor anterior mediante el atributo <code>data-render-target-id="chat-container"</code> en el script del proveedor.
     </footer>
   </div>
-
-  <script>
-    // Cambia aquí la URL de tu API si es necesario
-    const API_URL = 'https://back-jqdv9.ondigitalocean.app';
-
-    const messagesEl = document.getElementById('messages');
-    const input = document.getElementById('q');
-    const sendBtn = document.getElementById('send');
-
-    function addMessage(text, cls){
-      const d = document.createElement('div');
-      d.className = 'msg ' + cls;
-      d.textContent = text;
-      messagesEl.appendChild(d);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-
-    async function ask(question){
-      addMessage(question, 'user');
-      addMessage('Pensando...', 'bot');
-      try{
-        const res = await fetch(`${API_URL}/api/filter-question`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question })
-        });
-
-        // remove the 'Pensando...' placeholder
-        const placeholders = messagesEl.querySelectorAll('.msg.bot');
-        if(placeholders.length) placeholders[placeholders.length - 1].remove();
-
-        if(!res.ok){
-          addMessage('Error al contactar al servidor: ' + res.statusText, 'bot');
-          return;
-        }
-        const data = await res.json();
-        const answer = data?.answer || data?.response || (typeof data === 'string' ? data : JSON.stringify(data));
-        addMessage(answer, 'bot');
-      }catch(err){
-        const placeholders = messagesEl.querySelectorAll('.msg.bot');
-        if(placeholders.length) placeholders[placeholders.length - 1].remove();
-        addMessage('Network error: ' + err.message, 'bot');
-      }
-    }
-
-    sendBtn.addEventListener('click', ()=>{
-      const q = input.value && input.value.trim();
-      if(!q) return;
-      ask(q);
-      input.value = '';
-    });
-
-    input.addEventListener('keydown',(e)=>{if(e.key==='Enter'){sendBtn.click();}});
-  </script>
   <!-- Chatbot widget (AbogadoVirtual Chatbot) -->
   <script async
     src="https://qyu5z3uycrlt22lufgs5ac6v.agents.do-ai.run/static/chatbot/widget.js"
@@ -97,7 +39,8 @@
     data-secondary-color="#E5E8ED"
     data-button-background-color="#0061EB"
     data-starting-message="Hello! How can I help you today?"
-    data-logo="/static/chatbot/icons/default-agent.svg">
+    data-logo="/static/chatbot/icons/default-agent.svg"
+    data-render-target-id="chat-container">
   </script>
 </body>
 </html>

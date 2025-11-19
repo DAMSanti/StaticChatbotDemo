@@ -1,0 +1,25 @@
+.DS_Store
+Thumbs.db
+node_modules/
+.env
+.vscode/
+__pycache__/
+*.log
+# IDE files
+*.suo
+*.ntvs_analysis.dat
+*.njsproj
+*.sln
+
+# Windows cache
+ehthumbs.db
+
+# Python
+*.pyc
+
+# Build outputs
+dist/
+build/
+
+# OS generated files
+Desktop.ini
