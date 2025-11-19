@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Agent Direct</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        pre { background: #252526; padding: 10px; border-left: 3px solid #007acc; overflow-x: auto; }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+        .info { color: #569cd6; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Test Agent Direct</h1>
+    <p>Este archivo prueba la llamada directa al agente desde JavaScript</p>
+    
+    <h2>Variables de Configuracion</h2>
+    <p>
+        AGENT_URL: <strong id="agentUrl">https://webasistente-l9ise.ondigitalocean.app</strong><br>
+        AGENT_TOKEN: <strong id="agentToken">XUud8PiXyP3rlDiEtGEwJylKwIKdWwpt</strong><br>
+        CHATBOT_ID: <strong id="chatbotId">IurFFh0JbzeH7PLauKvv7WKGaCJb5F6L</strong>
+    </p>
+    
+    <h2>Tests</h2>
+    <button onclick="testConnectivity()">1. Test Conectividad</button>
+    <button onclick="testChatAPI()">2. Test Chat API</button>
+    <button onclick="testWidget()">3. Test Widget Provider</button>
+    <button onclick="testEndpoints()">4. Scan Endpoints</button>
+    
+    <h2>Resultados</h2>
+    <pre id="output"></pre>
+
+    <script>
+        const AGENT_URL = "https://webasistente-l9ise.ondigitalocean.app";
+        const AGENT_TOKEN = "XUud8PiXyP3rlDiEtGEwJylKwIKdWwpt";
+        const CHATBOT_ID = "IurFFh0JbzeH7PLauKvv7WKGaCJb5F6L";
+        const output = document.getElementById("output");
+
+        function log(msg, type = "info") {
+            const className = type === "success" ? "success" : type === "error" ? "error" : "info";
+            const line = `<span class="${className}">${msg}</span>\n`;
+            output.innerHTML += line;
+            console.log(msg);
+        }
+
+        function clearOutput() {
+            output.innerHTML = "";
+        }
+
+        async function testConnectivity() {
+            clearOutput();
+            log("[Test 1] Conectividad Basica");
+            try {
+                const response = await fetch(AGENT_URL, { method: "HEAD" });
+                log(`[OK] Agent accesible (HTTP ${response.status})`, "success");
+            } catch (err) {
+                log(`[X] Error: ${err.message}`, "error");
+            }
+        }
+
+        async function testChatAPI() {
+            clearOutput();
+            log("[Test 2] Chat API Endpoints");
+            
+            const endpoints = [
+                "/api/v1/chat/completions",
+                "/api/chat/completions",
+                "/v1/chat/completions",
+                "/chat/completions",
+                "/api/v1/completions",
+                "/completions",
+                "/api/v1/messages",
+                "/chat"
+            ];
+
+            const body = JSON.stringify({
+                model: "default",
+                input: "hola",
+                stream: false
+            });
+
+            for (const endpoint of endpoints) {
+                const url = `${AGENT_URL}${endpoint}`;
+                try {
+                    log(`Intentando: ${url}`, "info");
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${AGENT_TOKEN}`
+                        },
+                        body: body
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        log(`[OK] Endpoint valido: ${endpoint}`, "success");
+                        log(`Respuesta: ${JSON.stringify(data, null, 2)}`, "success");
+                        return;
+                    } else {
+                        log(`  HTTP ${response.status}`, "info");
+                    }
+                } catch (err) {
+                    log(`  Error: ${err.message}`, "error");
+                }
+            }
+            log("[X] No se encontro endpoint valido", "error");
+        }
+
+        async function testWidget() {
+            clearOutput();
+            log("[Test 3] Widget Provider");
+            const widgetProvider = "https://qyu5z3uycrlt22lufgs5ac6v.agents.do-ai.run";
+            
+            try {
+                log(`Conectando a: ${widgetProvider}`, "info");
+                const response = await fetch(widgetProvider, { method: "HEAD" });
+                log(`[OK] Widget provider accesible (HTTP ${response.status})`, "success");
+            } catch (err) {
+                log(`[X] Error: ${err.message}`, "error");
+            }
+        }
+
+        async function testEndpoints() {
+            clearOutput();
+            log("[Test 4] Scan de Endpoints Adicionales");
+            
+            const methods = ["GET", "POST", "PUT", "DELETE"];
+            const paths = [
+                "/",
+                "/api",
+                "/api/status",
+                "/health",
+                "/api/v1",
+                "/docs",
+                "/swagger",
+                "/openapi.json"
+            ];
+
+            for (const path of paths) {
+                for (const method of methods) {
+                    const url = `${AGENT_URL}${path}`;
+                    try {
+                        const response = await fetch(url, { 
+                            method: method,
+                            headers: { "Authorization": `Bearer ${AGENT_TOKEN}` }
+                        });
+                        if (response.status < 500) {
+                            log(`${method.padEnd(6)} ${path.padEnd(20)} → HTTP ${response.status}`, "success");
+                        }
+                    } catch (err) {
+                        // Ignorar errores de CORS
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

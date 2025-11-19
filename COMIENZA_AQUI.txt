@@ -1,0 +1,82 @@
+═══════════════════════════════════════════════════════════════════════════════
+                      ⚡ INICIO RÁPIDO - LO MÁS IMPORTANTE
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ TENEMOS:
+   • Widget funciona en index.html
+   • Token de acceso: XUud8PiXyP3rlDiEtGEwJylKwIKdWwpt
+   • Scripts listos para extraer y enriquecer citations
+   • Código React preparado para integrar
+
+❌ FALTA:
+   • El ENDPOINT del agente (URL para llamadas programáticas)
+
+───────────────────────────────────────────────────────────────────────────────
+
+🎯 ENCONTRAR EL ENDPOINT EN 3 PASOS:
+
+   1. Abre: https://cloud.digitalocean.com
+   
+   2. Navega:
+      ↓
+      Agent Platform (menú izquierdo)
+      ↓
+      Agent Workspaces
+      ↓
+      Tu workspace
+      ↓
+      Agents
+      ↓
+      Tu agente (IurFFh0JbzeH7PLauKvv7WKGaCJb5F6L)
+      ↓
+      Overview
+      ↓
+      ENDPOINT (busca esta sección)
+      
+   3. COPIA la URL que aparece en "ENDPOINT"
+      (NO es: https://webasistente-l9ise.ondigitalocean.app)
+      (SÍ es: algo parecido a: https://xxxxx-xxxxx.do-ai.run o similar)
+
+───────────────────────────────────────────────────────────────────────────────
+
+🔄 UNA VEZ QUE TENGAS EL ENDPOINT:
+
+   1. Abre .env.local
+   
+   2. Reemplaza la línea:
+      AGENT_URL=https://webasistente-l9ise.ondigitalocean.app
+      
+      Por:
+      AGENT_URL=https://[el-endpoint-que-copiaste]
+      
+   3. Guarda el archivo
+   
+   4. Abre PowerShell en esta carpeta y ejecuta:
+   
+      $Env:AGENT_URL = "[el-endpoint]"
+      $Env:AGENT_TOKEN = "XUud8PiXyP3rlDiEtGEwJylKwIKdWwpt"
+      .\scripts\run-citations-workflow.ps1
+      
+   5. Espera a que termine. Debería generar:
+      ✓ agent_response_complete.json
+      ✓ agent_response_with_urls.json
+      
+   6. Abre agent_response_with_urls.json y verifica que tenga URLs
+
+───────────────────────────────────────────────────────────────────────────────
+
+📚 LECTURA (por orden de prioridad):
+
+   1. STATUS.md ← Lee esto primero (estado actual)
+   2. README_ENDPOINT.txt ← Resumen visual
+   3. ENDPOINT_HELP.md ← Instrucciones detalladas
+   4. QUICK_START.md ← Una vez que tengas el endpoint
+   5. CITATIONS_GUIDE.md ← Referencia completa
+
+───────────────────────────────────────────────────────────────────────────────
+
+✉️ PRÓXIMO PASO:
+
+   Comparte el endpoint que encontres, y vamos al siguiente paso juntos.
+
+═══════════════════════════════════════════════════════════════════════════════
