@@ -287,6 +287,88 @@
         font-size: 20px;
       }
     }
+
+    /* Modal de citaciones */
+    .citation-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .citation-modal.active {
+      display: flex;
+    }
+
+    .citation-modal-content {
+      background: white;
+      border-radius: 12px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .citation-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #e6eef6;
+      padding-bottom: 12px;
+    }
+
+    .citation-modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #031B4E;
+    }
+
+    .citation-modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #94a3b8;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .citation-modal-close:hover {
+      color: #1a202c;
+    }
+
+    .citation-modal-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #475569;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .citation-modal-meta {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e6eef6;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .citation-modal-meta p {
+      margin: 4px 0;
+    }
   </style>
 </head>
 <body>
@@ -309,6 +391,18 @@
     </div>
   </div>
 
+  <!-- Modal de citaciones -->
+  <div id="citationModal" class="citation-modal">
+    <div class="citation-modal-content">
+      <div class="citation-modal-header">
+        <div class="citation-modal-title">Extracto de Fuente</div>
+        <button class="citation-modal-close" onclick="closeCitationModal()">✕</button>
+      </div>
+      <div class="citation-modal-body" id="citationModalBody"></div>
+      <div class="citation-modal-meta" id="citationModalMeta"></div>
+    </div>
+  </div>
+
   <script>
     'use strict';
 
@@ -321,6 +415,9 @@
 
     // Mapeo de citaciones a URLs (se actualizará dinámicamente)
     let citationMap = {};
+
+    // Almacenar retrieved data para mostrar extractos
+    let retrievalData = [];
 
     // Elementos del DOM
     const messagesContainer = document.getElementById('messages');
@@ -421,9 +518,11 @@
           // Intentar también extraer de retrieval_data si existe
           if (data.retrieval && data.retrieval.retrieved_data) {
             console.log('✓ También encontrado en data.retrieval.retrieved_data');
+            retrievalData = data.retrieval.retrieved_data;
             updateCitationMap(data.retrieval.retrieved_data);
           } else if (data.context && data.context.retrieved_data) {
             console.log('✓ También encontrado en data.context.retrieved_data');
+            retrievalData = data.context.retrieved_data;
             updateCitationMap(data.context.retrieved_data);
           }
 
@@ -479,41 +578,33 @@
         if (!match || !num) return match;
         
         const citationKey = `C${num}`;
-        const url = citationMap[citationKey];
+        const citationIndex = parseInt(num) - 1; // Index en retrieval data
 
-        console.log(`  ${match} → url = ${url || 'NO ENCONTRADA'}`);
+        console.log(`  ${match} → citation index = ${citationIndex}`);
 
-        if (url) {
-          return `<a href="${url}" class="citation-link" target="_blank" rel="noopener noreferrer">${match}</a>`;
-        }
-        return match;
+        // Crear link sin href, con data-citation-index para poder acceder al extracto
+        return `<a class="citation-link" data-citation-index="${citationIndex}" onclick="showCitationModal(${citationIndex})">${match}</a>`;
       });
     }
 
     function formatBotResponse(html) {
       // Parsear la respuesta del agente y formatearla correctamente
-      // Estructura esperada:
-      // **No soy un abogado real...** \n\n
-      // [Explicación con citaciones]
-      // Te recomiendo una consulta...
-      // **Categoría:** ... **Confianza:** ...
-
-      // Convertir saltos de línea múltiples en párrafos
       let formatted = html;
 
-      // 1. Encapsular disclaimer en <div class="disclaimer">
+      // 1. Encapsular disclaimer
       formatted = formatted.replace(
         /\*\*No soy un abogado real, soy un asistente virtual de Barbara & Abogados\.\*\*/g,
         '<div class="disclaimer"><strong>No soy un abogado real, soy un asistente virtual de Barbara &amp; Abogados.</strong></div>'
       );
 
-      // 2. Dividir por párrafos (saltos dobles)
+      // 2. Dividir por párrafos
       const parts = formatted.split(/\n\n+/);
       
       let result = '';
       let mainContent = '';
       let recommendation = '';
-      let metadataText = '';
+      let categoryText = '';
+      let confidenceText = '';
 
       // Procesar cada parte
       for (let i = 0; i < parts.length; i++) {
@@ -525,11 +616,23 @@
         if (part.includes('Te recomiendo')) {
           recommendation = part;
         }
-        // Si contiene "Categoría" o "Confianza"
-        else if (part.includes('Categoría') || part.includes('Confianza')) {
-          metadataText = part;
+        // Si contiene "Categoría"
+        else if (part.includes('**Categoría:**')) {
+          // Extraer categoría: **Categoría:** texto
+          const catMatch = part.match(/\*\*Categoría:\*\*\s*(.+?)(?=\n|$)/);
+          if (catMatch) {
+            categoryText = catMatch[1].trim();
+          }
         }
-        // Si contiene el disclaimer (ya procesado)
+        // Si contiene "Confianza"
+        else if (part.includes('**Confianza')) {
+          // Extraer confianza: **Confianza(respuesta):** 92% texto
+          const confMatch = part.match(/\*\*Confianza[^:]*:\*\*\s*(.+?)(?=\n|$)/);
+          if (confMatch) {
+            confidenceText = confMatch[1].trim();
+          }
+        }
+        // Si contiene el disclaimer
         else if (part.includes('disclaimer')) {
           result += part;
         }
@@ -542,25 +645,81 @@
       // Construir el HTML final
       let finalHTML = result;
       
-      // Agregar contenido principal en <div class="content">
+      // Agregar contenido principal
       if (mainContent.trim()) {
         finalHTML += `<div class="content">${mainContent.trim()}</div>`;
       }
 
-      // Agregar recomendación en <div class="recommendation">
+      // Agregar recomendación
       if (recommendation) {
         finalHTML += `<div class="recommendation">${recommendation}</div>`;
       }
 
-      // Procesar y formatear metadata
-      if (metadataText) {
-        // Convertir **text** a <strong>text</strong>
-        let formattedMetadata = metadataText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-        finalHTML += `<div class="metadata">${formattedMetadata}</div>`;
+      // Agregar metadata con formato específico
+      let metadataHTML = '<div class="metadata">';
+      if (categoryText) {
+        metadataHTML += `<div><strong>Categoría:</strong> ${categoryText}</div>`;
+      }
+      if (confidenceText) {
+        metadataHTML += `<div><strong>Confianza(respuesta):</strong> ${confidenceText}</div>`;
+      }
+      metadataHTML += '</div>';
+      
+      if (categoryText || confidenceText) {
+        finalHTML += metadataHTML;
       }
 
       return finalHTML;
     }
+
+    function showCitationModal(citationIndex) {
+      // Obtener el dato de retrieval en el índice especificado
+      if (!retrievalData || !retrievalData[citationIndex]) {
+        console.error(`No hay datos para citación ${citationIndex}`);
+        return;
+      }
+
+      const citationData = retrievalData[citationIndex];
+      const modal = document.getElementById('citationModal');
+      const modalBody = document.getElementById('citationModalBody');
+      const modalMeta = document.getElementById('citationModalMeta');
+
+      // Mostrar contenido del extracto
+      modalBody.textContent = citationData.page_content || 'No hay contenido disponible';
+
+      // Mostrar metadata
+      let metaHTML = '';
+      if (citationData.filename) {
+        metaHTML += `<p><strong>Fuente:</strong> ${citationData.filename}</p>`;
+      }
+      if (citationData.metadata && citationData.metadata.page_number) {
+        metaHTML += `<p><strong>Página:</strong> ${citationData.metadata.page_number}</p>`;
+      }
+      if (citationData.metadata && citationData.metadata.item_name) {
+        metaHTML += `<p><strong>Documento:</strong> ${citationData.metadata.item_name}</p>`;
+      }
+      modalMeta.innerHTML = metaHTML;
+
+      // Mostrar modal
+      modal.classList.add('active');
+    }
+
+    function closeCitationModal() {
+      const modal = document.getElementById('citationModal');
+      modal.classList.remove('active');
+    }
+
+    // Cerrar modal al hacer click fuera
+    document.addEventListener('DOMContentLoaded', function() {
+      const modal = document.getElementById('citationModal');
+      if (modal) {
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) {
+            closeCitationModal();
+          }
+        });
+      }
+    });
 
     function addMessage(content, type, isHtml = false) {
       const messageGroup = document.createElement('div');
