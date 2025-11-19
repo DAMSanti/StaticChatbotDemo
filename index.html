@@ -484,6 +484,15 @@
         console.log('=== RESPUESTA COMPLETA DE API ===');
         console.log(JSON.stringify(data, null, 2));
         console.log('=== FIN RESPUESTA ===');
+        
+        // DEBUG: Verificar estructura de citaciones
+        console.log('Estructura de datos:', {
+          hasChoices: !!data.choices,
+          hasCitations: !!data.citations,
+          citationsStructure: data.citations ? Object.keys(data.citations) : null,
+          hasRetrieval: !!data.retrieval,
+          hasContext: !!data.context
+        });
 
         // Remover indicador de carga
         removeLoadingIndicator(loadingId);
@@ -688,30 +697,39 @@
       console.log(`Retrieval data disponible:`, retrievalData);
       console.log(`Citation map:`, citationMap);
       
-      // Si no hay retrieval data, mostrar error
-      if (!retrievalData || retrievalData.length === 0) {
-        console.error('No hay datos de retrieval disponibles');
-        alert('No hay datos de fuentes disponibles para esta citación');
-        return;
-      }
-
-      // Obtener el número de citación (C1 → 1, C2 → 2, etc.)
-      const citationNum = parseInt(citationKey.substring(1));
-      const citationIndex = citationNum - 1;
-
-      // Verificar que el índice es válido
-      if (citationIndex < 0 || citationIndex >= retrievalData.length) {
-        console.error(`Índice de citación ${citationIndex} fuera de rango. Disponibles: ${retrievalData.length}`);
-        alert(`La citación ${citationKey} no tiene fuente disponible`);
-        return;
-      }
-
-      const citationData = retrievalData[citationIndex];
+      let citationData = null;
       const modal = document.getElementById('citationModal');
       const modalBody = document.getElementById('citationModalBody');
       const modalMeta = document.getElementById('citationModalMeta');
 
-      console.log(`Mostrando citación ${citationKey} (índice ${citationIndex}):`, citationData);
+      // OPCIÓN 1: Si hay retrieval data, usar índice directo
+      if (retrievalData && retrievalData.length > 0) {
+        const citationNum = parseInt(citationKey.substring(1));
+        const citationIndex = citationNum - 1;
+
+        if (citationIndex >= 0 && citationIndex < retrievalData.length) {
+          citationData = retrievalData[citationIndex];
+          console.log(`✓ Citación encontrada en retrievalData:`, citationData);
+        }
+      }
+
+      // OPCIÓN 2: Si no hay retrieval data, usar citationMap (URL) + abrir en pestaña
+      if (!citationData && citationMap[citationKey]) {
+        const url = citationMap[citationKey];
+        console.log(`ℹ No hay extracto disponible. Abriendo URL: ${url}`);
+        // Abrir el documento en una nueva pestaña
+        window.open(url, '_blank');
+        return;
+      }
+
+      // Si tampoco hay en citationMap, mostrar error
+      if (!citationData) {
+        console.error(`No hay datos para la citación ${citationKey}`);
+        alert(`No hay datos disponibles para la citación ${citationKey}`);
+        return;
+      }
+
+      console.log(`Mostrando citación ${citationKey}:`, citationData);
 
       // Mostrar contenido del extracto
       modalBody.textContent = citationData.page_content || 'No hay contenido disponible';
