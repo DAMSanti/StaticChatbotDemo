@@ -583,13 +583,13 @@
       return text.replace(citationPattern, (match, num) => {
         if (!match || !num) return match;
         
+        const citationNum = parseInt(num);
         const citationKey = `C${num}`;
-        const citationIndex = parseInt(num) - 1; // Index en retrieval data
 
-        console.log(`  ${match} → citation index = ${citationIndex}`);
+        console.log(`  ${match} → citation num = ${citationNum}`);
 
-        // Crear link sin href, con data-citation-index para poder acceder al extracto
-        return `<a class="citation-link" data-citation-index="${citationIndex}" onclick="showCitationModal(${citationIndex})">${match}</a>`;
+        // Crear link sin href, con data-citation-num para poder acceder al extracto
+        return `<a class="citation-link" data-citation-num="${citationNum}" onclick="showCitationModal('${citationKey}')">${match}</a>`;
       });
     }
 
@@ -678,10 +678,27 @@
       return finalHTML;
     }
 
-    function showCitationModal(citationIndex) {
-      // Obtener el dato de retrieval en el índice especificado
-      if (!retrievalData || !retrievalData[citationIndex]) {
-        console.error(`No hay datos para citación ${citationIndex}`);
+    function showCitationModal(citationKey) {
+      // Obtener el índice de la citación desde el mapeo
+      console.log(`Buscando citación: ${citationKey}`);
+      console.log(`Retrieval data disponible:`, retrievalData);
+      console.log(`Citation map:`, citationMap);
+      
+      // Si no hay retrieval data, mostrar error
+      if (!retrievalData || retrievalData.length === 0) {
+        console.error('No hay datos de retrieval disponibles');
+        alert('No hay datos de fuentes disponibles para esta citación');
+        return;
+      }
+
+      // Obtener el número de citación (C1 → 1, C2 → 2, etc.)
+      const citationNum = parseInt(citationKey.substring(1));
+      const citationIndex = citationNum - 1;
+
+      // Verificar que el índice es válido
+      if (citationIndex < 0 || citationIndex >= retrievalData.length) {
+        console.error(`Índice de citación ${citationIndex} fuera de rango. Disponibles: ${retrievalData.length}`);
+        alert(`La citación ${citationKey} no tiene fuente disponible`);
         return;
       }
 
@@ -689,6 +706,8 @@
       const modal = document.getElementById('citationModal');
       const modalBody = document.getElementById('citationModalBody');
       const modalMeta = document.getElementById('citationModalMeta');
+
+      console.log(`Mostrando citación ${citationKey} (índice ${citationIndex}):`, citationData);
 
       // Mostrar contenido del extracto
       modalBody.textContent = citationData.page_content || 'No hay contenido disponible';
