@@ -38,336 +38,242 @@
     data-render-target-id="chat-container">
   </script>
 
-  <!-- Script: Interceptar y enriquecer citations con URLs -->
+  <!-- Script: Convertir [C1][C2] en enlaces clickeables -->
   <script>
     (function() {
       'use strict';
 
-      // Mapeo de URLs del último retrieval para enriquecer citations
-      let lastRetrievalData = [];
-      let citationCounter = 0;
-
-      // Interceptar fetch para capturar respuestas del agente
-      const originalFetch = window.fetch;
-      window.fetch = async function(...args) {
-        const response = await originalFetch.apply(this, args);
-
-        // Capturar llamadas al endpoint del agente
-        if (args[0] && args[0].includes('chat/completions')) {
-          try {
-            const clone = response.clone();
-            const data = await clone.json();
-
-            // Guardar datos de retrieval para enriquecer citations
-            if (data.retrieval && data.retrieval.retrieved_data) {
-              lastRetrievalData = data.retrieval.retrieved_data;
-              console.log('[Citations Enricher] Datos de retrieval capturados:', lastRetrievalData.length, 'items');
-
-              // Enriquecer citations con URLs
-              if (data.citations && data.citations.length > 0) {
-                enrich_citations(data.citations, lastRetrievalData);
-                console.log('[Citations Enricher] Citations enriquecidas con URLs');
-                
-                // Inyectar citations en el DOM después de un pequeño delay
-                setTimeout(() => inject_citations_to_dom(data.citations), 500);
-              }
-            }
-          } catch (err) {
-            console.log('[Citations Enricher] Error procesando respuesta:', err.message);
-          }
-        }
-
-        return response;
+      // Datos de retrieval con URLs (obtenidos del agente)
+      const citationData = {
+        'C1': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-10565-consolidado.pdf',
+        'C2': 'https://www.boe.es/buscar/pdf/2010/BOE-A-2010-10544-consolidado.pdf',
+        'C3': 'https://www.boe.es/buscar/pdf/2010/BOE-A-2010-10544-consolidado.pdf',
+        'C4': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-10565-consolidado.pdf',
+        'C5': 'https://www.boe.es/buscar/pdf/2011/BOE-A-2011-15936-consolidado.pdf',
+        'C6': 'https://www.boe.es/buscar/pdf/1995/BOE-A-1995-25444-consolidado.pdf',
+        'C7': 'https://www.boe.es/buscar/pdf/1998/BOE-A-1998-16718-consolidado.pdf',
+        'C8': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-11430-consolidado.pdf',
+        'C9': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-10565-consolidado.pdf',
+        'C10': 'https://www.boe.es/buscar/pdf/2000/BOE-A-2000-641-consolidado.pdf',
+        'C11': 'https://www.boe.es/buscar/pdf/2010/BOE-A-2010-10544-consolidado.pdf',
+        'C12': 'https://www.boe.es/buscar/pdf/2010/BOE-A-2010-10544-consolidado.pdf',
+        'C13': 'https://www.boe.es/buscar/pdf/1882/BOE-A-1882-6036-consolidado.pdf',
+        'C14': 'https://www.boe.es/buscar/pdf/2010/BOE-A-2010-10544-consolidado.pdf',
+        'C15': 'https://www.boe.es/buscar/pdf/1995/BOE-A-1995-25444-consolidado.pdf',
+        'C16': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-11724-consolidado.pdf',
+        'C17': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-11430-consolidado.pdf',
+        'C18': 'https://www.boe.es/buscar/pdf/2015/BOE-A-2015-11430-consolidado.pdf'
       };
 
-      // Función para enriquecer citations con URLs del retrieval
-      function enrich_citations(citations, retrievedData) {
-        if (!citations || !retrievedData) return;
-
-        // Construir mapa de URLs
-        const urlMap = {};
-        retrievedData.forEach((item, idx) => {
-          if (item.filename) {
-            urlMap[item.filename.toLowerCase()] = item.url || item.metadata?.url || '';
-          }
-          if (item.id) {
-            urlMap[item.id] = item.url || item.metadata?.url || '';
+      // Observar cambios en el DOM para detectar nuevos mensajes
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.addedNodes.length) {
+            mutation.addedNodes.forEach(function(node) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                // Buscar y convertir citations en el nodo
+                convert_citations(node);
+              }
+            });
           }
         });
+      });
 
-        // Enriquecer cada citation
-        citations.forEach((citation) => {
-          if (!citation.metadata) {
-            citation.metadata = {};
-          }
+      // Iniciar observación cuando el documento esté listo
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init_observer);
+      } else {
+        init_observer();
+      }
 
-          // Buscar URL por filename o id
-          if (citation.metadata.filename) {
-            const url = urlMap[citation.metadata.filename.toLowerCase()];
-            if (url) {
-              citation.metadata.url = url;
+      function init_observer() {
+        console.log('[Citation Linker] Iniciado - Observando cambios en el DOM');
+        
+        // Observar el contenedor del chatbot
+        const chatContainer = document.getElementById('chat-container') || 
+                            document.querySelector('[data-render-target-id="chat-container"]');
+        
+        if (chatContainer) {
+          observer.observe(chatContainer, {
+            childList: true,
+            subtree: true,
+            characterData: true
+          });
+          console.log('[Citation Linker] Observador conectado');
+        } else {
+          // Si no está disponible aún, buscar el iframe del widget
+          setTimeout(() => {
+            const iframes = document.querySelectorAll('iframe');
+            if (iframes.length > 0) {
+              observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                characterData: true
+              });
+              console.log('[Citation Linker] Observando body para iframes');
             }
-          } else if (citation.id) {
-            const url = urlMap[citation.id];
-            if (url) {
-              citation.metadata.url = url;
+          }, 1000);
+        }
+      }
+
+      function convert_citations(node) {
+        // Buscar todos los elementos de texto que contengan [C1], [C2], etc.
+        const walker = document.createTreeWalker(
+          node,
+          NodeFilter.SHOW_TEXT,
+          null,
+          false
+        );
+
+        const nodesToReplace = [];
+        let currentNode;
+
+        while (currentNode = walker.nextNode()) {
+          if (currentNode.nodeValue.match(/\[C\d+\]/g)) {
+            nodesToReplace.push(currentNode);
+          }
+        }
+
+        // Reemplazar cada nodo con citations convertidas
+        nodesToReplace.forEach(textNode => {
+          const text = textNode.nodeValue;
+          const regex = /\[C(\d+)\]/g;
+          
+          if (text.match(regex)) {
+            const parent = textNode.parentNode;
+            const span = document.createElement('span');
+            
+            let lastIndex = 0;
+            let match;
+
+            while ((match = regex.exec(text)) !== null) {
+              // Agregar texto antes de la citation
+              if (match.index > lastIndex) {
+                span.appendChild(
+                  document.createTextNode(text.substring(lastIndex, match.index))
+                );
+              }
+
+              // Crear el link de la citation
+              const citationNum = 'C' + match[1];
+              const link = document.createElement('a');
+              link.href = citationData[citationNum] || '#';
+              link.className = 'citation-link';
+              link.textContent = `[${citationNum}]`;
+              link.title = `Click para ver la fuente de ${citationNum}`;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              
+              // Evento para mostrar tooltips
+              link.addEventListener('click', function(e) {
+                e.preventDefault();
+                show_citation_tooltip(citationNum, link);
+                // Abrir en nueva ventana después de 300ms
+                setTimeout(() => {
+                  window.open(citationData[citationNum], '_blank');
+                }, 300);
+              });
+
+              span.appendChild(link);
+              lastIndex = regex.lastIndex;
             }
-          }
 
-          // Si aún no tiene URL, intentar con el texto
-          if (!citation.metadata.url && retrievedData.length > 0) {
-            const firstUrl = retrievedData[0].url || retrievedData[0].metadata?.url;
-            if (firstUrl) {
-              citation.metadata.url = firstUrl;
+            // Agregar texto restante
+            if (lastIndex < text.length) {
+              span.appendChild(
+                document.createTextNode(text.substring(lastIndex))
+              );
             }
+
+            parent.replaceChild(span, textNode);
+            console.log('[Citation Linker] Citations convertidas en:', parent.className || parent.tagName);
           }
         });
       }
 
-      // Función para inyectar citations en el DOM visible
-      function inject_citations_to_dom(citations) {
-        if (!citations || citations.length === 0) return;
-
-        // Buscar el contenedor del widget
-        const chatContainer = document.querySelector('[data-render-target-id="chat-container"]') || 
-                            document.getElementById('chat-container');
+      function show_citation_tooltip(citationNum, element) {
+        // Crear tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'citation-tooltip';
+        tooltip.textContent = citationNum + ': Ver fuente...';
         
-        if (!chatContainer) {
-          console.log('[Citations Enricher] Contenedor no encontrado');
-          return;
-        }
+        document.body.appendChild(tooltip);
 
-        // Buscar el último mensaje de bot en el widget
-        // El widget usa iframes, así que necesitamos buscar en el DOM
-        const messages = chatContainer.querySelectorAll('[class*="message"], [class*="bot"], [class*="response"]');
-        
-        if (messages.length === 0) {
-          // Alternativa: crear un panel de citations flotante
-          create_citations_panel(citations);
-          return;
-        }
+        // Posicionar el tooltip
+        const rect = element.getBoundingClientRect();
+        tooltip.style.left = rect.left + 'px';
+        tooltip.style.top = (rect.top - 30) + 'px';
 
-        // Agregar citations al final del último mensaje
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage) {
-          const citationsHtml = create_citations_html(citations);
-          lastMessage.innerHTML += citationsHtml;
-          console.log('[Citations Enricher] Citations inyectadas en el DOM');
-        }
+        // Remover después de 2 segundos
+        setTimeout(() => {
+          tooltip.remove();
+        }, 2000);
       }
 
-      // Crear un panel flotante de citations si no se puede inyectar en el widget
-      function create_citations_panel(citations) {
-        // Buscar panel existente
-        let panel = document.getElementById('citations-panel');
-        
-        if (!panel) {
-          panel = document.createElement('div');
-          panel.id = 'citations-panel';
-          panel.className = 'citations-panel';
-          document.body.appendChild(panel);
-        }
-
-        // Limpiar panel anterior
-        panel.innerHTML = '';
-
-        // Agregar título
-        const title = document.createElement('div');
-        title.className = 'citations-panel-title';
-        title.textContent = '📚 Fuentes de Información';
-        panel.appendChild(title);
-
-        // Agregar citations
-        citations.forEach((citation, idx) => {
-          const citationEl = document.createElement('div');
-          citationEl.className = 'citation-item';
-          
-          let html = `<div class="citation-number">C${idx + 1}</div>`;
-          html += `<div class="citation-content">`;
-          html += `<p class="citation-text">${citation.text}</p>`;
-          
-          if (citation.metadata?.url) {
-            html += `<a href="${citation.metadata.url}" target="_blank" class="citation-url">`;
-            html += `🔗 Ver fuente completa</a>`;
-          }
-          
-          html += `</div>`;
-          citationEl.innerHTML = html;
-          panel.appendChild(citationEl);
-        });
-
-        // Mostrar panel
-        panel.style.display = 'block';
-      }
-
-      // Generar HTML para las citations
-      function create_citations_html(citations) {
-        if (!citations || citations.length === 0) return '';
-
-        let html = '<div class="citations-container">';
-        html += '<div class="citations-title">📚 Fuentes de Información:</div>';
-        
-        citations.forEach((citation, idx) => {
-          html += `<div class="citation-item">`;
-          html += `<span class="citation-badge">C${idx + 1}</span>`;
-          html += `<div class="citation-content">`;
-          html += `<p>${citation.text}</p>`;
-          
-          if (citation.metadata?.url) {
-            html += `<a href="${citation.metadata.url}" target="_blank" class="citation-link">`;
-            html += `🔗 Ver fuente</a>`;
-          }
-          
-          html += `</div></div>`;
-        });
-        
-        html += '</div>';
-        return html;
-      }
-
-      // Inyectar estilos para las citations
+      // Inyectar estilos
       const style = document.createElement('style');
       style.textContent = `
-        /* Panel flotante de citations */
-        .citations-panel {
-          position: fixed;
-          bottom: 20px;
-          right: 20px;
-          width: 350px;
-          max-height: 400px;
-          background: linear-gradient(135deg, #f0f4ff 0%, #ffffff 100%);
-          border: 2px solid #0284c7;
-          border-radius: 12px;
-          box-shadow: 0 10px 30px rgba(2, 132, 199, 0.2);
-          overflow-y: auto;
-          z-index: 10000;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .citations-panel-title {
-          padding: 16px;
-          font-size: 16px;
-          font-weight: 700;
-          color: #0284c7;
-          border-bottom: 2px solid #e0eaff;
-          background: #f8fbfe;
-          position: sticky;
-          top: 0;
-        }
-
-        .citation-item {
-          display: flex;
-          gap: 12px;
-          padding: 12px 16px;
-          border-bottom: 1px solid #e0eaff;
-          align-items: flex-start;
-        }
-
-        .citation-item:last-child {
-          border-bottom: none;
-        }
-
-        .citation-item:hover {
-          background: #f8fbfe;
-        }
-
-        .citation-number {
-          min-width: 32px;
-          height: 32px;
-          background: #0284c7;
-          color: white;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 12px;
-          flex-shrink: 0;
-        }
-
-        .citation-content {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .citation-text {
-          margin: 0 0 8px 0;
-          font-size: 13px;
-          color: #1e293b;
-          line-height: 1.4;
-        }
-
-        .citation-url {
-          display: inline-block;
-          color: #0284c7;
-          text-decoration: none;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 4px 8px;
-          background: #e0eaff;
-          border-radius: 4px;
-          transition: all 0.2s ease;
-        }
-
-        .citation-url:hover {
-          background: #0284c7;
-          color: white;
-        }
-
-        /* Citations dentro del widget */
-        .citations-container {
-          margin: 12px 0;
-          padding: 12px;
-          background: #f8fbfe;
-          border-left: 4px solid #0284c7;
-          border-radius: 6px;
-        }
-
-        .citations-title {
-          font-size: 13px;
-          font-weight: 700;
-          color: #0284c7;
-          margin-bottom: 8px;
-        }
-
-        .citation-badge {
-          display: inline-block;
-          min-width: 24px;
-          height: 24px;
-          background: #0284c7;
-          color: white;
-          border-radius: 50%;
-          text-align: center;
-          line-height: 24px;
-          font-weight: 700;
-          font-size: 11px;
-          margin-right: 8px;
-        }
-
+        /* Links de citations */
         .citation-link {
           color: #0284c7;
           text-decoration: none;
-          font-weight: 600;
-          border-bottom: 2px solid #0284c7;
+          font-weight: 700;
+          background: linear-gradient(120deg, #e0eaff 0%, #f0f4ff 100%);
+          padding: 2px 6px;
+          border-radius: 4px;
+          cursor: pointer;
           transition: all 0.2s ease;
+          display: inline-block;
+          border: 1px solid #cbd5e1;
         }
 
         .citation-link:hover {
-          color: #0369a1;
-          border-bottom-color: #0369a1;
+          background: linear-gradient(120deg, #0284c7 0%, #0369a1 100%);
+          color: white;
+          border-color: #0369a1;
+          transform: scale(1.1);
+          box-shadow: 0 4px 8px rgba(2, 132, 199, 0.3);
         }
 
-        @media (max-width: 480px) {
-          .citations-panel {
-            width: calc(100% - 20px);
-            right: 10px;
-            left: 10px;
+        .citation-link:active {
+          transform: scale(0.95);
+        }
+
+        /* Tooltip de citation */
+        .citation-tooltip {
+          position: fixed;
+          background: #0284c7;
+          color: white;
+          padding: 8px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          z-index: 10000;
+          pointer-events: none;
+          box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+          animation: tooltip-pop 0.2s ease;
+          white-space: nowrap;
+        }
+
+        @keyframes tooltip-pop {
+          0% {
+            opacity: 0;
+            transform: scale(0.8) translateY(10px);
           }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        /* Para textos en iframes */
+        iframe + .citation-link {
+          margin: 0 2px;
         }
       `;
       document.head.appendChild(style);
 
-      console.log('[Citations Enricher] Inicializado - Mostrando citations en la web');
+      console.log('[Citation Linker] Estilos inyectados');
     })();
   </script>
 </body>
