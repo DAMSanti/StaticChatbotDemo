@@ -521,8 +521,12 @@
             });
           }
 
-          // Intentar también extraer de retrieval_data si existe
-          if (data.retrieval && data.retrieval.retrieved_data) {
+          // Extraer citaciones del objeto data.citations.citations
+          if (data.citations && data.citations.citations) {
+            console.log('✓ Citaciones encontradas en data.citations.citations');
+            retrievalData = data.citations.citations;
+            console.log('Citaciones almacenadas:', retrievalData);
+          } else if (data.retrieval && data.retrieval.retrieved_data) {
             console.log('✓ También encontrado en data.retrieval.retrieved_data');
             retrievalData = data.retrieval.retrieved_data;
             updateCitationMap(data.retrieval.retrieved_data);
