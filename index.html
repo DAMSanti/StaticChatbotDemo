@@ -401,7 +401,7 @@
   <div id="citationModal" class="citation-modal">
     <div class="citation-modal-content">
       <div class="citation-modal-header">
-        <div class="citation-modal-title">Extracto de Fuente</div>
+        <div class="citation-modal-title" id="citationModalTitle">Extracto de Fuente</div>
         <button class="citation-modal-close" onclick="closeCitationModal()">✕</button>
       </div>
       <div class="citation-modal-body" id="citationModalBody"></div>
@@ -535,6 +535,21 @@
             console.log('✓ Citaciones encontradas en data.citations.citations');
             retrievalData = data.citations.citations;
             console.log('Citaciones almacenadas:', retrievalData);
+            
+            // Crear mapeo de citaciones encontradas en el mensaje a sus índices en el array
+            const citationIndices = {};
+            citationMatches.forEach((citationText, arrayIndex) => {
+              const num = citationText.match(/\d+/)[0];
+              const citationKey = `C${num}`;
+              // Mapear la citación al índice en el array (secuencial)
+              if (!citationIndices[citationKey]) {
+                citationIndices[citationKey] = arrayIndex;
+              }
+            });
+            console.log('Mapeo de citaciones a índices:', citationIndices);
+            
+            // Guardar el mapeo en una variable global para usarlo después
+            window.citationIndices = citationIndices;
           } else if (data.retrieval && data.retrieval.retrieved_data) {
             console.log('✓ También encontrado en data.retrieval.retrieved_data');
             retrievalData = data.retrieval.retrieved_data;
@@ -695,34 +710,24 @@
       // Obtener el índice de la citación desde el mapeo
       console.log(`Buscando citación: ${citationKey}`);
       console.log(`Retrieval data disponible:`, retrievalData);
-      console.log(`Citation map:`, citationMap);
+      console.log(`Citation indices:`, window.citationIndices);
       
       let citationData = null;
       const modal = document.getElementById('citationModal');
       const modalBody = document.getElementById('citationModalBody');
       const modalMeta = document.getElementById('citationModalMeta');
 
-      // OPCIÓN 1: Si hay retrieval data, usar índice directo
-      if (retrievalData && retrievalData.length > 0) {
-        const citationNum = parseInt(citationKey.substring(1));
-        const citationIndex = citationNum - 1;
-
+      // Si hay retrieval data y mapeo de índices, usar el mapeo correcto
+      if (retrievalData && retrievalData.length > 0 && window.citationIndices && window.citationIndices[citationKey] !== undefined) {
+        const citationIndex = window.citationIndices[citationKey];
+        
         if (citationIndex >= 0 && citationIndex < retrievalData.length) {
           citationData = retrievalData[citationIndex];
-          console.log(`✓ Citación encontrada en retrievalData:`, citationData);
+          console.log(`✓ Citación ${citationKey} encontrada en índice ${citationIndex}:`, citationData);
         }
       }
 
-      // OPCIÓN 2: Si no hay retrieval data, usar citationMap (URL) + abrir en pestaña
-      if (!citationData && citationMap[citationKey]) {
-        const url = citationMap[citationKey];
-        console.log(`ℹ No hay extracto disponible. Abriendo URL: ${url}`);
-        // Abrir el documento en una nueva pestaña
-        window.open(url, '_blank');
-        return;
-      }
-
-      // Si tampoco hay en citationMap, mostrar error
+      // Si no encontró datos, mostrar error
       if (!citationData) {
         console.error(`No hay datos para la citación ${citationKey}`);
         alert(`No hay datos disponibles para la citación ${citationKey}`);
@@ -731,20 +736,35 @@
 
       console.log(`Mostrando citación ${citationKey}:`, citationData);
 
+      // Extraer nombre del documento del filename
+      let documentName = 'Documento';
+      if (citationData.filename) {
+        // Extraer el nombre del archivo de la URL
+        const parts = citationData.filename.split('/');
+        documentName = parts[parts.length - 1] || 'Documento';
+        // Decodificar URL encoded characters
+        documentName = decodeURIComponent(documentName);
+      }
+
+      // Actualizar título del modal con el nombre del documento
+      document.getElementById('citationModalTitle').textContent = documentName;
+
       // Mostrar contenido del extracto
-      modalBody.textContent = citationData.page_content || 'No hay contenido disponible';
+      if (citationData.page_content) {
+        modalBody.textContent = citationData.page_content;
+      } else {
+        modalBody.textContent = 'No hay contenido disponible';
+      }
 
       // Mostrar metadata
       let metaHTML = '';
-      if (citationData.filename) {
-        metaHTML += `<p><strong>Fuente:</strong> ${citationData.filename}</p>`;
-      }
       if (citationData.metadata && citationData.metadata.page_number) {
         metaHTML += `<p><strong>Página:</strong> ${citationData.metadata.page_number}</p>`;
       }
-      if (citationData.metadata && citationData.metadata.item_name) {
-        metaHTML += `<p><strong>Documento:</strong> ${citationData.metadata.item_name}</p>`;
+      if (citationData.filename) {
+        metaHTML += `<p><strong>Fuente:</strong> <a href="${citationData.filename}" target="_blank">Ver documento completo</a></p>`;
       }
+      
       modalMeta.innerHTML = metaHTML;
 
       // Mostrar modal
