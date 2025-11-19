@@ -176,14 +176,8 @@
 
     /* Formateo de respuestas del bot */
     .message.bot .disclaimer {
-      background: linear-gradient(120deg, #fee2e2 0%, #fecaca 100%);
-      border-left: 4px solid #dc2626;
-      padding: 12px 14px;
-      border-radius: 6px;
-      margin-bottom: 16px;
-      font-size: 13px;
-      font-weight: 500;
-      color: #991b1b;
+      font-weight: 600;
+      margin-bottom: 12px;
     }
 
     .message.bot .content {
@@ -197,28 +191,20 @@
     }
 
     .message.bot .recommendation {
-      background: #f0fdf4;
-      border-left: 4px solid #16a34a;
-      padding: 12px 14px;
-      border-radius: 6px;
-      margin-bottom: 16px;
-      font-size: 13px;
-      color: #166534;
-      font-style: italic;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: #1a202c;
     }
 
     .message.bot .metadata {
-      background: #f3f4f6;
-      border-left: 4px solid #6b7280;
-      padding: 12px 14px;
-      border-radius: 6px;
-      font-size: 12px;
-      color: #374151;
       margin-top: 12px;
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
     }
 
     .message.bot .metadata strong {
-      color: #111827;
+      color: #1a202c;
       font-weight: 600;
     }
 
@@ -527,7 +513,7 @@
       let result = '';
       let mainContent = '';
       let recommendation = '';
-      let metadata = '';
+      let metadataText = '';
 
       // Procesar cada parte
       for (let i = 0; i < parts.length; i++) {
@@ -541,7 +527,7 @@
         }
         // Si contiene "Categoría" o "Confianza"
         else if (part.includes('Categoría') || part.includes('Confianza')) {
-          metadata = part;
+          metadataText = part;
         }
         // Si contiene el disclaimer (ya procesado)
         else if (part.includes('disclaimer')) {
@@ -566,9 +552,11 @@
         finalHTML += `<div class="recommendation">${recommendation}</div>`;
       }
 
-      // Agregar metadata en <div class="metadata">
-      if (metadata) {
-        finalHTML += `<div class="metadata">${metadata}</div>`;
+      // Procesar y formatear metadata
+      if (metadataText) {
+        // Convertir **text** a <strong>text</strong>
+        let formattedMetadata = metadataText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        finalHTML += `<div class="metadata">${formattedMetadata}</div>`;
       }
 
       return finalHTML;
