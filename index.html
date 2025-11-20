@@ -453,6 +453,7 @@
         <div class="citation-modal-title" id="citationModalTitle">Extracto de Fuente</div>
         <div style="display:flex; gap:8px; align-items:center;">
           <button id="citationCopyBtn" class="citation-modal-copy" title="Copiar extracto">📋</button>
+          <button id="citationLinkBtn" class="citation-modal-copy" title="Copiar enlace a la fuente">🔗</button>
           <button id="citationModalCloseBtn" class="citation-modal-close" onclick="closeCitationModal()" aria-label="Cerrar diálogo">✕</button>
         </div>
       </div>
@@ -842,6 +843,8 @@
 
       // Mostrar modal
       modal.classList.add('active');
+  // Guardar datos actuales para acciones (copiar enlace, etc.)
+  window._currentCitationData = citationData;
       // Focus management: move focus to close button for accessibility
       const closeBtn = document.getElementById('citationModalCloseBtn');
       if (closeBtn) closeBtn.focus();
@@ -856,6 +859,7 @@
           window._prevActiveElement.focus();
         }
       } catch(e){}
+      try { window._currentCitationData = null; } catch(e){}
     }
 
     // Cerrar modal al hacer click fuera
@@ -876,6 +880,18 @@
           const modalBody = document.getElementById('citationModalBody');
           if (!modalBody || !modalBody.textContent) return;
           copyTextToClipboard(modalBody.textContent.trim());
+        });
+      }
+      const linkBtn = document.getElementById('citationLinkBtn');
+      if (linkBtn) {
+        linkBtn.addEventListener('click', function() {
+          const data = window._currentCitationData;
+          if (!data) return;
+          let url = data.filename || '';
+          if (data.metadata && data.metadata.page_number) {
+            url = `${url}#page=${data.metadata.page_number}`;
+          }
+          if (url) copyTextToClipboard(url);
         });
       }
 
