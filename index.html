@@ -672,6 +672,14 @@
         if (item.label) possibleLabels.push(String(item.label));
         if (item.citation_label) possibleLabels.push(String(item.citation_label));
         if (item.metadata && item.metadata.citation_label) possibleLabels.push(String(item.metadata.citation_label));
+        // check any metadata key that contains 'citation' or 'cite' or 'label'
+        if (item.metadata) {
+          Object.keys(item.metadata).forEach(k => {
+            if (/citation|cite|label/i.test(k)) {
+              possibleLabels.push(String(item.metadata[k]));
+            }
+          });
+        }
         if (item.metadata && item.metadata.citation_number) possibleLabels.push(String(item.metadata.citation_number));
         // Also check numeric 'index' field if integer
         if (item.index && !isNaN(parseInt(item.index, 10))) possibleLabels.push(`C${parseInt(item.index, 10)}`);
@@ -805,10 +813,13 @@
       }
 
       nodes.forEach(node => {
+        // Skip nodes inside script, style, code or pre elements
+        const parentEl = node.parentElement;
+        if (parentEl && ['SCRIPT','STYLE','CODE','PRE'].includes(parentEl.tagName)) return;
         const parent = node.parentNode;
         if (!parent) return;
-        // don't highlight inside <mark> already
-        if (parent.closest && parent.closest('mark')) return;
+  // don't highlight inside <mark> already
+  if (parent.closest && parent.closest('mark')) return;
         const text = node.nodeValue;
         if (!text || !text.trim()) return;
         const frag = document.createDocumentFragment();
