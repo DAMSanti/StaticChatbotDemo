@@ -400,6 +400,12 @@
       margin-right: 8px;
     }
 
+    .citation-highlight {
+      background: linear-gradient(90deg,#fff59d,#fff176);
+      border-radius: 3px;
+      padding: 1px 3px;
+    }
+
     /* Toast for copy confirmation */
     .copy-toast {
       position: fixed;
@@ -465,10 +471,9 @@
   <script>
     'use strict';
 
-    // Configuración
-    const API_URL = 'https://qyu5z3uycrlt22lufgs5ac6v.agents.do-ai.run/api/v1/chat/completions';
-    const AGENT_ID = 'a141afdb-c01e-11f0-b074-4e013e2ddde4';
-    const ACCESS_TOKEN = 'XUud8PiXyP3rlDiEtGEwJylKwIKdWwpt';
+  // Configuración - use proxy server at /api/chat so token is not exposed to clients
+  const API_URL = '/api/chat';
+  const AGENT_ID = 'a141afdb-c01e-11f0-b074-4e013e2ddde4';
 
     let conversationHistory = [];
 
@@ -510,6 +515,9 @@
         content: message
       });
 
+      // Guardar términos de consulta para highlights en modal (filtrar palabras pequeñas)
+      window.lastQueryTerms = tokenizeTerms(message);
+
       // Mostrar indicador de escritura
       const loadingId = addLoadingIndicator();
 
@@ -518,9 +526,7 @@
         const response = await fetch(API_URL, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${ACCESS_TOKEN}`,
-            'X-Agent-ID': AGENT_ID
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             messages: conversationHistory
@@ -590,15 +596,8 @@
             console.log('Citaciones almacenadas:', retrievalData);
             
             // Crear mapeo de citaciones encontradas en el mensaje a sus índices en el array
-            const citationIndices = {};
-            citationMatches.forEach((citationText, arrayIndex) => {
-              const num = citationText.match(/\d+/)[0];
-              const citationKey = `C${num}`;
-              // Mapear la citación al índice en el array (secuencial)
-              if (!citationIndices[citationKey]) {
-                citationIndices[citationKey] = arrayIndex;
-              }
-            });
+            // Mejorar mapeo: intentar asociar por filename, por metadatos y, si no, por orden de aparición
+            const citationIndices = buildLabelToIndexMap(citationMatches, retrievalData, citationMap);
             console.log('Mapeo de citaciones a índices:', citationIndices);
             
             // Guardar el mapeo en una variable global para usarlo después
@@ -652,6 +651,53 @@
       });
     }
 
+    // Build a robust mapping from label keys (C1, C2, C13) to indices in retrievalData
+    function buildLabelToIndexMap(citationMatches, retrievalData, citationMap) {
+      const unique = [...new Set(citationMatches)];
+      const labels = unique.map(m => `C${(m.match(/\d+/)||[])[0]}`);
+      const map = {};
+
+      // Preprocess: filename -> indices
+      const url2indices = {};
+      retrievalData.forEach((item, idx) => {
+        const url = item.filename || '';
+        if (!url2indices[url]) url2indices[url] = [];
+        url2indices[url].push(idx);
+      });
+
+      // 1) Try to map by exact URL
+      labels.forEach(label => {
+        const url = citationMap[label];
+        if (url && url2indices[url] && url2indices[url].length > 0) {
+          map[label] = url2indices[url].shift();
+        }
+      });
+
+      // 2) Try to map by filename includes
+      labels.forEach(label => {
+        if (map[label] !== undefined) return;
+        const url = citationMap[label];
+        if (!url) return;
+        for (const possibleUrl in url2indices) {
+          if (possibleUrl && url && possibleUrl.includes(url) || url.includes(possibleUrl)) {
+            map[label] = url2indices[possibleUrl].shift();
+            break;
+          }
+        }
+      });
+
+      // 3) Fallback by order: map remaining labels to remaining indices
+      const assigned = Object.values(map).filter(v => v !== undefined);
+      const remainingIndices = retrievalData.map((_,i) => i).filter(i => !assigned.includes(i));
+      labels.forEach((label, idx) => {
+        if (map[label] === undefined) {
+          map[label] = remainingIndices.shift() ?? null;
+        }
+      });
+
+      return map;
+    }
+
     function processCitations(text) {
       // Reemplazar TODOS los formatos: [C1], 【C1】, §C1 con enlaces
       const citationPattern = /[\[\【]?§?C(\d+)[\]\】]?/g;
@@ -672,6 +718,41 @@
         // Crear link sin href, con data-citation-num para poder acceder al extracto
         return `<a class="citation-link" data-citation-num="${citationNum}" onclick="showCitationModal('${citationKey}')">${match}</a>`;
       });
+    }
+
+    // Tokenize user message into significant terms for highlighting
+    function tokenizeTerms(text) {
+      if (!text) return [];
+      // Simplest approach: split on non-word chars, filter small words
+      const words = text
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}_\s]+/gu, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2);
+      // Remove duplicates
+      return [...new Set(words)];
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&"'<>]/g, function (m) {
+        switch (m) {
+          case '&': return '&amp;';
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '"': return '&quot;';
+          case "'": return '&#39;';
+          default: return m;
+        }
+      });
+    }
+
+    function highlightText(text, terms) {
+      if (!terms || terms.length === 0) return escapeHtml(text);
+      const escaped = escapeHtml(text);
+      // Build regex: whole words only, ignore case
+      const safeTerms = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const regex = new RegExp('\\b(' + safeTerms.join('|') + ')\\b', 'gi');
+      return escaped.replace(regex, match => `<mark class="citation-highlight">${match}</mark>`);
     }
 
     function formatBotResponse(html) {
@@ -772,11 +853,20 @@
 
       // Si hay retrieval data y mapeo de índices, usar el mapeo correcto
       if (retrievalData && retrievalData.length > 0 && window.citationIndices && window.citationIndices[citationKey] !== undefined) {
-        const citationIndex = window.citationIndices[citationKey];
-        
-        if (citationIndex >= 0 && citationIndex < retrievalData.length) {
-          citationData = retrievalData[citationIndex];
-          console.log(`✓ Citación ${citationKey} encontrada en índice ${citationIndex}:`, citationData);
+        const mappedIndex = window.citationIndices[citationKey];
+        if (mappedIndex !== null && mappedIndex >= 0 && mappedIndex < retrievalData.length) {
+          citationData = retrievalData[mappedIndex];
+          console.log(`✓ Citación ${citationKey} encontrada en índice mapeado ${mappedIndex}:`, citationData);
+        }
+      }
+
+      // Si aún no encontramos, intentar buscar por filename en citationMap
+      if (!citationData && retrievalData && retrievalData.length > 0 && citationMap && citationMap[citationKey]) {
+        const targetUrl = citationMap[citationKey];
+        const matchIndex = retrievalData.findIndex(item => item.filename && item.filename === targetUrl);
+        if (matchIndex >= 0) {
+          citationData = retrievalData[matchIndex];
+          console.log(`✓ Citación ${citationKey} encontrada por filename en índice ${matchIndex}:`, citationData);
         }
       }
 
@@ -805,9 +895,10 @@
   // Actualizar título del modal con el nombre del documento
       document.getElementById('citationModalTitle').textContent = documentName;
 
-      // Mostrar contenido del extracto
+      // Mostrar contenido del extracto y resaltar términos de consulta
       if (citationData.page_content) {
-        modalBody.textContent = citationData.page_content;
+        const terms = window.lastQueryTerms || [];
+        modalBody.innerHTML = highlightText(citationData.page_content, terms);
       } else {
         modalBody.textContent = 'No hay contenido disponible';
       }

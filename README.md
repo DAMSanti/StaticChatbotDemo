@@ -18,6 +18,11 @@
 
 ```powershell
 # Abre PowerShell en la carpeta del proyecto
+# Ejecuta el servidor proxy para ocultar la clave de API (sigue los pasos abajo)
+npm install
+npm start
+
+# Alternativamente, si solo pruebas el front-end localmente sin proxy:
 python -m http.server 8000
 
 # Abre el navegador en:
@@ -103,15 +108,19 @@ CITATIONS_CLICKEABLES.md        ← Docs del anterior widget (opcional)
 README.md                       ← Este archivo
 ```
 
-## 🔧 Configuración
+## 🔧 Configuración (Recomendado)
 
-Para cambiar el agente o credentials, edita en `index.html`:
+Para no exponer tu `ACCESS_TOKEN` en el cliente, debes usar el proxy incluido. Crea un archivo `.env` basado en `.env.example`, y lanza el servidor:
 
-```javascript
-const API_URL = 'https://qyu5z3uycrlt22lufgs5ac6v.agents.do-ai.run/api/v1/chat/completions';
-const AGENT_ID = 'a141afdb-c01e-11f0-b074-4e013e2ddde4';
-const ACCESS_TOKEN = 'XUud8PiXyP3rlDiEtGEwJylKwIKdWwpt';
+```powershell
+# Copia ejemplo
+env.example .env
+# Edita .env y añade tu ACCESS_TOKEN real
+npm install
+npm start
 ```
+
+El frontend ahora llama a `/api/chat` y el servidor inyecta `Authorization` en cada petición.
 
 ## 📱 Responsive
 
