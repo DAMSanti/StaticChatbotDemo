@@ -353,6 +353,23 @@
       flex-shrink: 0;
     }
 
+    .citation-modal-copy {
+      background: #f1f5f9;
+      border: 1px solid #e6eef6;
+      padding: 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #031B4E;
+      font-size: 14px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .citation-modal-copy:hover {
+      background: #e6eef6;
+    }
+
     .citation-modal-close:hover {
       color: #1a202c;
     }
@@ -374,6 +391,34 @@
       font-size: 12px;
       color: #94a3b8;
       flex-shrink: 0;
+    }
+
+    .citation-modal-meta .source-domain {
+      font-weight: 600;
+      color: #0f1724;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    /* Toast for copy confirmation */
+    .copy-toast {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 20px;
+      background: #111827;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      z-index: 10001;
+      opacity: 0;
+      transition: opacity 200ms ease-in-out;
+      pointer-events: none;
+    }
+    .copy-toast.show {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     .citation-modal-meta p {
@@ -402,11 +447,14 @@
   </div>
 
   <!-- Modal de citaciones -->
-  <div id="citationModal" class="citation-modal">
+  <div id="citationModal" class="citation-modal" role="dialog" aria-modal="true" aria-labelledby="citationModalTitle" tabindex="-1">
     <div class="citation-modal-content">
       <div class="citation-modal-header">
         <div class="citation-modal-title" id="citationModalTitle">Extracto de Fuente</div>
-        <button class="citation-modal-close" onclick="closeCitationModal()">✕</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="citationCopyBtn" class="citation-modal-copy" title="Copiar extracto">📋</button>
+          <button id="citationModalCloseBtn" class="citation-modal-close" onclick="closeCitationModal()" aria-label="Cerrar diálogo">✕</button>
+        </div>
       </div>
       <div class="citation-modal-body" id="citationModalBody"></div>
       <div class="citation-modal-meta" id="citationModalMeta"></div>
@@ -750,7 +798,10 @@
         documentName = decodeURIComponent(documentName);
       }
 
-      // Actualizar título del modal con el nombre del documento
+  // Guardar elemento con focus previo para restaurarlo al cerrar
+  window._prevActiveElement = document.activeElement;
+
+  // Actualizar título del modal con el nombre del documento
       document.getElementById('citationModalTitle').textContent = documentName;
 
       // Mostrar contenido del extracto
@@ -762,22 +813,49 @@
 
       // Mostrar metadata
       let metaHTML = '';
+      let pageNumber = null;
       if (citationData.metadata && citationData.metadata.page_number) {
-        metaHTML += `<p><strong>Página:</strong> ${citationData.metadata.page_number}</p>`;
+        pageNumber = citationData.metadata.page_number;
+        metaHTML += `<p><strong>Página:</strong> ${pageNumber}</p>`;
       }
       if (citationData.filename) {
-        metaHTML += `<p><strong>Fuente:</strong> <a href="${citationData.filename}" target="_blank">Ver documento completo</a></p>`;
+        // Añadir fragmento para abrir en página si existe
+        let link = citationData.filename;
+        try {
+          // PDF viewers often accept #page=N
+          if (pageNumber) link = `${citationData.filename}#page=${pageNumber}`;
+        } catch (err) { /* ignore */ }
+        const domain = (function(url){ try { return new URL(url).hostname; } catch(e){ return null } })(citationData.filename);
+        // Generar búsqueda rápida dentro del dominio con una porción del extracto para encontrar contexto
+        let quickSearchHTML = '';
+        try {
+          if (domain && modalBody && modalBody.textContent) {
+            const snippet = modalBody.textContent.trim().slice(0, 120);
+            const q = encodeURIComponent(`site:${domain} "${snippet}"`);
+            quickSearchHTML = ` <a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">Buscar en la fuente</a>`;
+          }
+        } catch(e){}
+        metaHTML += `<p><strong>Fuente:</strong> <a href="${link}" target="_blank" rel="noopener">Abrir documento completo</a> <span class="source-domain">${domain ? domain : ''}</span>${quickSearchHTML}</p>`;
       }
       
       modalMeta.innerHTML = metaHTML;
 
       // Mostrar modal
       modal.classList.add('active');
+      // Focus management: move focus to close button for accessibility
+      const closeBtn = document.getElementById('citationModalCloseBtn');
+      if (closeBtn) closeBtn.focus();
     }
 
     function closeCitationModal() {
       const modal = document.getElementById('citationModal');
       modal.classList.remove('active');
+      // Restore previous focus
+      try {
+        if (window._prevActiveElement && typeof window._prevActiveElement.focus === 'function') {
+          window._prevActiveElement.focus();
+        }
+      } catch(e){}
     }
 
     // Cerrar modal al hacer click fuera
@@ -790,7 +868,79 @@
           }
         });
       }
+
+      // Attach copy button handler
+      const copyBtn = document.getElementById('citationCopyBtn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+          const modalBody = document.getElementById('citationModalBody');
+          if (!modalBody || !modalBody.textContent) return;
+          copyTextToClipboard(modalBody.textContent.trim());
+        });
+      }
+
+      // ESC to close and basic focus trap inside modal
+      document.addEventListener('keydown', function(e) {
+        const modalEl = document.getElementById('citationModal');
+        if (!modalEl || !modalEl.classList.contains('active')) return;
+        // ESC
+        if (e.key === 'Escape' || e.key === 'Esc') {
+          e.preventDefault();
+          closeCitationModal();
+          return;
+        }
+        // Basic tab trap
+        if (e.key === 'Tab') {
+          const focusable = modalEl.querySelectorAll('button, a, [tabindex]:not([tabindex="-1"])');
+          if (!focusable.length) return;
+          const focusArray = Array.from(focusable).filter(el => el.offsetParent !== null);
+          if (!focusArray.length) return;
+          const first = focusArray[0];
+          const last = focusArray[focusArray.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            // backwards from first -> last
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            // forwards from last -> first
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      });
     });
+
+    // Utility: copy and show toast
+    function copyTextToClipboard(text) {
+      if (!navigator.clipboard) {
+        // fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = 0;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try { document.execCommand('copy'); showCopyToast(); } catch(e) {}
+        textarea.remove();
+        return;
+      }
+      navigator.clipboard.writeText(text).then(function() { showCopyToast(); }).catch(function(err){
+        console.error('Copy failed', err); showCopyToast('Error al copiar');
+      });
+    }
+
+    function showCopyToast(msg) {
+      let toast = document.getElementById('copyToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'copyToast';
+        toast.className = 'copy-toast';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg || 'Extracto copiado al portapapeles';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
 
     function addMessage(content, type, isHtml = false) {
       const messageGroup = document.createElement('div');
