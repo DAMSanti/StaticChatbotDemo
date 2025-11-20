@@ -652,7 +652,7 @@
     }
 
     // Build a robust mapping from label keys (C1, C2, C13) to indices in retrievalData
-    function buildLabelToIndexMap(citationMatches, retrievalData, citationMap) {
+  function buildLabelToIndexMap(citationMatches, retrievalData, citationMap) {
       const unique = [...new Set(citationMatches)];
       const labels = unique.map(m => `C${(m.match(/\d+/)||[])[0]}`);
       const map = {};
@@ -665,7 +665,34 @@
         url2indices[url].push(idx);
       });
 
-      // 1) Try to map by exact URL
+      // Preprocess: label-like fields inside retrievalData if present (e.g., item.citation_label or metadata.citation_label or item.label)
+      const labelToIdx = {};
+      retrievalData.forEach((item, idx) => {
+        const possibleLabels = [];
+        if (item.label) possibleLabels.push(String(item.label));
+        if (item.citation_label) possibleLabels.push(String(item.citation_label));
+        if (item.metadata && item.metadata.citation_label) possibleLabels.push(String(item.metadata.citation_label));
+        if (item.metadata && item.metadata.citation_number) possibleLabels.push(String(item.metadata.citation_number));
+        // Also check numeric 'index' field if integer
+        if (item.index && !isNaN(parseInt(item.index, 10))) possibleLabels.push(`C${parseInt(item.index, 10)}`);
+        possibleLabels.forEach(l => {
+          // Normalize to form 'C<number>' if applicable
+          const m = l.match(/C\s*\-?\s*(\d+)/i);
+          if (m) {
+            const label = `C${parseInt(m[1], 10)}`;
+            labelToIdx[label] = idx;
+          }
+        });
+      });
+
+      // 1) Try to map by explicit label inside retrieval data
+      labels.forEach(label => {
+        if (labelToIdx[label] !== undefined) {
+          map[label] = labelToIdx[label];
+        }
+      });
+
+      // 2) Try to map by exact URL
       labels.forEach(label => {
         const url = citationMap[label];
         if (url && url2indices[url] && url2indices[url].length > 0) {
@@ -673,7 +700,7 @@
         }
       });
 
-      // 2) Try to map by filename includes
+  // 3) Try to map by filename includes
       labels.forEach(label => {
         if (map[label] !== undefined) return;
         const url = citationMap[label];
@@ -686,7 +713,7 @@
         }
       });
 
-      // 3) Fallback by order: map remaining labels to remaining indices
+  // 4) Fallback by order: map remaining labels to remaining indices
       const assigned = Object.values(map).filter(v => v !== undefined);
       const remainingIndices = retrievalData.map((_,i) => i).filter(i => !assigned.includes(i));
       labels.forEach((label, idx) => {
@@ -723,14 +750,22 @@
     // Tokenize user message into significant terms for highlighting
     function tokenizeTerms(text) {
       if (!text) return [];
-      // Simplest approach: split on non-word chars, filter small words
+      // Simplest approach: lower-case and split on non-word chars, filter small words
       const words = text
         .toLowerCase()
         .replace(/[^\p{L}\p{N}_\s]+/gu, ' ')
         .split(/\s+/)
         .filter(w => w.length > 2);
-      // Remove duplicates
-      return [...new Set(words)];
+      // build bigrams for phrase-highlighting
+      const bigrams = [];
+      for (let i = 0; i < words.length - 1; i++) {
+        if (words[i].length > 2 && words[i+1].length > 2) {
+          bigrams.push(`${words[i]} ${words[i+1]}`);
+        }
+      }
+      const allTerms = [...words, ...bigrams];
+      // Remove duplicates and return
+      return [...new Set(allTerms)];
     }
 
     function escapeHtml(str) {
@@ -749,10 +784,50 @@
     function highlightText(text, terms) {
       if (!terms || terms.length === 0) return escapeHtml(text);
       const escaped = escapeHtml(text);
-      // Build regex: whole words only, ignore case
-      const safeTerms = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      // Sort terms by length desc so longer phrases match first (avoid partial highlighting)
+      const uniqueTerms = [...new Set(terms)].sort((a,b) => b.length - a.length);
+      const safeTerms = uniqueTerms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
       const regex = new RegExp('\\b(' + safeTerms.join('|') + ')\\b', 'gi');
       return escaped.replace(regex, match => `<mark class="citation-highlight">${match}</mark>`);
+    }
+
+    // Highlight in DOM (preserve existing elements and links)
+    function highlightElementTextContent(container, terms) {
+      if (!container || !terms || terms.length === 0) return;
+      const uniqueTerms = [...new Set(terms)].sort((a,b) => b.length - a.length);
+      const safeTerms = uniqueTerms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const regex = new RegExp('\\b(' + safeTerms.join('|') + ')\\b', 'gi');
+
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+      const nodes = [];
+      while (walker.nextNode()) {
+        nodes.push(walker.currentNode);
+      }
+
+      nodes.forEach(node => {
+        const parent = node.parentNode;
+        if (!parent) return;
+        // don't highlight inside <mark> already
+        if (parent.closest && parent.closest('mark')) return;
+        const text = node.nodeValue;
+        if (!text || !text.trim()) return;
+        const frag = document.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const before = text.substring(lastIndex, match.index);
+          if (before) frag.appendChild(document.createTextNode(before));
+          const mark = document.createElement('mark');
+          mark.className = 'citation-highlight';
+          mark.appendChild(document.createTextNode(match[0]));
+          frag.appendChild(mark);
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex === 0) return; // no match
+        const after = text.substring(lastIndex);
+        if (after) frag.appendChild(document.createTextNode(after));
+        parent.replaceChild(frag, node);
+      });
     }
 
     function formatBotResponse(html) {
@@ -1065,6 +1140,15 @@
       messageGroup.appendChild(messageDiv);
       messagesContainer.appendChild(messageGroup);
 
+      // If isHtml and it's a bot message, highlight query terms inside the message DOM
+      if (isHtml && type === 'bot') {
+        try {
+          const terms = window.lastQueryTerms || [];
+          if (terms && terms.length > 0) {
+            highlightElementTextContent(messageDiv, terms);
+          }
+        } catch (e) { console.error('Highlight error', e); }
+      }
       // Scroll al final
       scrollToBottom();
     }
